@@ -2,7 +2,10 @@ mod iris;
 
 use std::{
     collections::HashSet,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Mutex,
+    },
 };
 
 use anndists::dist::Distance;
@@ -10,7 +13,7 @@ use hnsw_rs::hnsw::Hnsw;
 use indicatif::{ProgressBar, ProgressStyle};
 use iris::{IrisCode, IrisCodeArray};
 use rand::{seq::index::sample, thread_rng};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 fn to_array(code: &[u64]) -> [u64; IrisCodeArray::IRIS_CODE_SIZE_U64] {
     bytemuck::try_cast_slice(code).unwrap().try_into().unwrap()
@@ -38,12 +41,14 @@ impl Distance<u64> for HD {
 }
 
 fn main() {
-    const N_POINTS: usize = 40_000;
+    // Dataset parameters
+    const N_POINTS: usize = 10_000;
+    const RANDOM_QUERIES: usize = 10_000;
+
+    // HNSW parameters
     const MAX_NB_CONNECTION: usize = 128;
     const EF_C: usize = 128;
     const KNBN: usize = 1;
-    const BATCH_SIZE: usize = 1_000;
-    const RANDOM_QUERIES: usize = 10_000;
 
     let mut rng = thread_rng();
     let nb_layer: usize = 16.min((N_POINTS as f32).ln().trunc() as usize);
@@ -55,33 +60,36 @@ fn main() {
 
     // Fill the DB
     let bar = ProgressBar::new(N_POINTS as u64).with_style(
-        ProgressStyle::with_template("{elapsed_precise} {wide_bar} {pos}/{len} {percent_precise}%")
-            .unwrap(),
+        ProgressStyle::with_template(
+            "Insert: {elapsed_precise} {wide_bar} {pos}/{len} {percent_precise}%",
+        )
+        .unwrap(),
     );
-    let mut random_queries = vec![];
-    for i in 0..N_POINTS / BATCH_SIZE {
-        let mut batch = vec![];
-        for j in 0..BATCH_SIZE {
-            let idx = i * BATCH_SIZE + j;
-            let code = IrisCode::random_rng(&mut rng);
-            if random_query_indices.contains(&idx) {
-                random_queries.push((code.clone(), idx));
-            }
-            batch.push((code.as_merged_array(), idx));
+    let random_queries = Mutex::new(vec![]);
+    (0..N_POINTS).into_par_iter().for_each(|idx| {
+        let mut rng = thread_rng();
+        let code = IrisCode::random_rng(&mut rng);
+        if random_query_indices.contains(&idx) {
+            random_queries.lock().unwrap().push((code.clone(), idx));
         }
-        batch.par_iter().for_each(|(code, idx)| {
-            hnsw.insert_slice((code, *idx));
-            bar.inc(1);
-        });
-    }
+        hnsw.insert_slice((&code.as_merged_array(), idx));
+        bar.inc(1);
+    });
 
     bar.finish();
 
     hnsw.set_searching_mode(true);
 
     // Search the DB
-    let correct = AtomicU64::new(0);
-    random_queries.par_iter().for_each(|(code, idx)| {
+    let random_queries_vec = random_queries.lock().unwrap().clone();
+    let bar = ProgressBar::new(random_queries_vec.len() as u64).with_style(
+        ProgressStyle::with_template(
+            "Search: {elapsed_precise} {wide_bar} {pos}/{len} {percent_precise}%",
+        )
+        .unwrap(),
+    );
+    let correct = AtomicUsize::new(0);
+    random_queries_vec.par_iter().for_each(|(code, idx)| {
         let mut rng = thread_rng();
         let query = code.get_similar_iris(&mut rng);
         let knn_neighbours = hnsw.search(&query.as_merged_array(), KNBN, EF_C);
@@ -89,10 +97,13 @@ fn main() {
         if *idx == knn_neighbours[0].d_id {
             correct.fetch_add(1, Ordering::Relaxed);
         }
+        bar.inc(1);
     });
+
+    bar.finish();
 
     println!(
         "Recall: {:.2}%",
-        (correct.load(Ordering::Relaxed) as f32) / (random_queries.len() as f32) * 100.0
+        (correct.load(Ordering::Relaxed) as f32) / (random_queries_vec.len() as f32) * 100.0
     );
 }

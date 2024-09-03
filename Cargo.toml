@@ -6,7 +6,10 @@ edition = "2021"
 [dependencies]
 anndists = { version = "0.1.2" }
 bytemuck = "1.17.1"
-hnsw_rs = { git = "https://github.com/jean-pierreBoth/hnswlib-rs.git" }
+hnsw_rs = { git = "https://github.com/philsippl/hnswlib-rs.git" }
 indicatif = "0.17.8"
 rand = "0.8.5"
 rayon = "1.10.0"
+
+[profile.release]
+debug = 1

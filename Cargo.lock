@@ -259,7 +259,7 @@ dependencies = [
 [[package]]
 name = "hnsw_rs"
 version = "0.3.1"
-source = "git+https://github.com/jean-pierreBoth/hnswlib-rs.git#a7fb9a920d69576c79d93f365b1bca01498ef0f9"
+source = "git+https://github.com/philsippl/hnswlib-rs.git#9201069c16eb7225a49acb833a96814bca87e5c6"
 dependencies = [
  "anndists",
  "anyhow",
