@@ -15,10 +15,18 @@ use iris::{IrisCode, IrisCodeArray};
 use rand::{seq::index::sample, thread_rng};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
+// Dataset parameters
+const N_POINTS: usize = 1_000_000;
+const RANDOM_QUERIES: usize = 1_000_000;
+
+// HNSW parameters
+const MAX_NB_CONNECTION: usize = 128;
+const EF_C: usize = 128;
+const KNBN: usize = 1;
+
 fn to_array(code: &[u64]) -> [u64; IrisCodeArray::IRIS_CODE_SIZE_U64] {
     bytemuck::try_cast_slice(code).unwrap().try_into().unwrap()
 }
-
 struct HD;
 impl Distance<u64> for HD {
     fn eval(&self, va: &[u64], vb: &[u64]) -> f32 {
@@ -41,15 +49,6 @@ impl Distance<u64> for HD {
 }
 
 fn main() {
-    // Dataset parameters
-    const N_POINTS: usize = 10_000;
-    const RANDOM_QUERIES: usize = 10_000;
-
-    // HNSW parameters
-    const MAX_NB_CONNECTION: usize = 128;
-    const EF_C: usize = 128;
-    const KNBN: usize = 1;
-
     let mut rng = thread_rng();
     let nb_layer: usize = 16.min((N_POINTS as f32).ln().trunc() as usize);
     let random_query_indices: HashSet<usize> = sample(&mut rng, N_POINTS, RANDOM_QUERIES)

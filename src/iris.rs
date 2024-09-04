@@ -15,7 +15,7 @@ impl Default for IrisCodeArray {
 }
 
 impl IrisCodeArray {
-    pub const IRIS_CODE_SIZE: usize = 128;
+    pub const IRIS_CODE_SIZE: usize = 256;
     pub const IRIS_CODE_SIZE_BYTES: usize = (Self::IRIS_CODE_SIZE + 7) / 8;
     pub const IRIS_CODE_SIZE_U64: usize = (Self::IRIS_CODE_SIZE + 63) / 64;
     pub const ZERO: Self = IrisCodeArray([0; Self::IRIS_CODE_SIZE_U64]);
