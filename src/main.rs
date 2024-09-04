@@ -4,7 +4,7 @@ use std::{
     collections::HashSet,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Mutex,
+        LazyLock, Mutex,
     },
 };
 
@@ -16,13 +16,15 @@ use rand::{seq::index::sample, thread_rng};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 // Dataset parameters
-const N_POINTS: usize = 1_000_000;
-const RANDOM_QUERIES: usize = 1_000_000;
+const N_POINTS: usize = 100_000;
+const RANDOM_QUERIES: usize = 10_000;
 
 // HNSW parameters
 const MAX_NB_CONNECTION: usize = 128;
 const EF_C: usize = 128;
 const KNBN: usize = 1;
+
+static EVAL_COUNTER: LazyLock<AtomicUsize> = LazyLock::new(|| AtomicUsize::new(0));
 
 fn to_array(code: &[u64]) -> [u64; IrisCodeArray::IRIS_CODE_SIZE_U64] {
     bytemuck::try_cast_slice(code).unwrap().try_into().unwrap()
@@ -30,6 +32,7 @@ fn to_array(code: &[u64]) -> [u64; IrisCodeArray::IRIS_CODE_SIZE_U64] {
 struct HD;
 impl Distance<u64> for HD {
     fn eval(&self, va: &[u64], vb: &[u64]) -> f32 {
+        EVAL_COUNTER.fetch_add(1, Ordering::Relaxed);
         let iris_code1 = IrisCodeArray(to_array(&va[0..IrisCodeArray::IRIS_CODE_SIZE_U64]));
         let mask_code1 = IrisCodeArray(to_array(&va[IrisCodeArray::IRIS_CODE_SIZE_U64..]));
         let iris_code2 = IrisCodeArray(to_array(&vb[0..IrisCodeArray::IRIS_CODE_SIZE_U64]));
@@ -78,6 +81,7 @@ fn main() {
     bar.finish();
 
     hnsw.set_searching_mode(true);
+    EVAL_COUNTER.store(0, Ordering::Relaxed);
 
     // Search the DB
     let random_queries_vec = random_queries.lock().unwrap().clone();
@@ -102,7 +106,12 @@ fn main() {
     bar.finish();
 
     println!(
-        "Recall: {:.2}%",
+        "ØEvals: {}",
+        EVAL_COUNTER.load(Ordering::Relaxed) / random_queries_vec.len()
+    );
+
+    println!(
+        "Recall: {:.4}%",
         (correct.load(Ordering::Relaxed) as f32) / (random_queries_vec.len() as f32) * 100.0
     );
 }
